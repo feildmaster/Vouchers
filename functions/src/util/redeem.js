@@ -6,6 +6,7 @@ const {
   expiredVoucher,
   invalidVoucher,
   payoutFailed,
+  redemptionInProgress,
   usedVoucher,
   status: {
     COMPLETED,
@@ -13,6 +14,8 @@ const {
   },
 } = require('./constants');
 const types = require('./types');
+
+const LEASE = 2 * 60 * 1000;
 
 module.exports = async function redeem({ allowedTypes, code, uid }) {
   const normalized = normalize(code);
@@ -33,12 +36,15 @@ module.exports = async function redeem({ allowedTypes, code, uid }) {
 
     const expiresAt = voucher.get('expiresAt');
     if (expiresAt && expiresAt.toMillis() <= Date.now()) throw expiredVoucher;
-    if (redemption.exists) throw alreadyRedeemed;
+    const resuming = redemption.exists && redemption.get('status') === PENDING;
+    if (redemption.exists && !resuming) throw alreadyRedeemed;
+    if (resuming && Date.now() - redemption.get('date').toMillis() < LEASE) throw redemptionInProgress;
 
-    const used = voucher.get('used');
-    if (used >= voucher.get('uses')) throw usedVoucher;
-
-    t.update(voucherRef, { used: used + 1 });
+    if (!resuming) {
+      const used = voucher.get('used');
+      if (used >= voucher.get('uses')) throw usedVoucher;
+      t.update(voucherRef, { used: used + 1 });
+    }
     t.set(redemptionRef, { date: FieldValue.serverTimestamp(), status: PENDING });
     return { data: voucher.get('data'), type: voucher.get('type') };
   });

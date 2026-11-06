@@ -5,6 +5,7 @@ exports.invalidRequestId = 'Invalid request id';
 exports.invalidUser = 'User not found';
 exports.invalidVoucher = 'Voucher not found';
 exports.payoutFailed = 'Payout failed';
+exports.redemptionInProgress = 'Redemption in progress';
 exports.usedVoucher = 'Voucher fully used';
 
 exports.status = {

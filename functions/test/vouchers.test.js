@@ -457,3 +457,40 @@ test('vouchers an admin creates are never marked for deletion', async () => {
 
   assert.equal('deleteAt' in fake.store.get(`voucher/${code}`), false);
 });
+
+const strand = (uid, ageMs) => fake.store.set(`voucher/${CODE}/redemptions/${uid}`, {
+  date: new Date(Date.now() - ageMs),
+  status: 'pending',
+});
+
+test('a redemption stranded as pending is finished by a retry without using the voucher up twice', async () => {
+  seed({ used: 1 });
+  strand('user1', 10 * 60 * 1000);
+
+  const reply = await redeem.run({ code: CODE, type: 'credit' }, member('user1'));
+
+  assert.equal(reply.transaction, 'tx1');
+  assert.equal(fetchCalls.length, 1);
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 1);
+  assert.equal(fake.store.get(`voucher/${CODE}/redemptions/user1`).status, 'completed');
+});
+
+test('a pending redemption that is still recent is left alone', async () => {
+  seed({ used: 1 });
+  strand('user1', 10 * 1000);
+
+  await expectError(redeem.run({ code: CODE, type: 'credit' }, member('user1')), 'Redemption in progress');
+  assert.equal(fetchCalls.length, 0);
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 1);
+});
+
+test('a stranded redemption does not hold a use for anyone else, and a failed retry releases it', async () => {
+  seed({ used: 1 });
+  strand('user1', 10 * 60 * 1000);
+  fetchReply = { ok: false, body: { error: 'Invalid wallet' } };
+
+  await expectError(redeem.run({ code: CODE, type: 'credit' }, member('user1')), 'Payout failed');
+
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 0);
+  assert.equal(fake.store.has(`voucher/${CODE}/redemptions/user1`), false);
+});
