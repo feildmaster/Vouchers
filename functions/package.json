@@ -7,7 +7,7 @@
     "deploy": "firebase deploy --only functions:vouchers"
   },
   "engines": {
-    "node": "24"
+    "node": "22"
   },
   "main": "index.js",
   "dependencies": {
