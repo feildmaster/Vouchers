@@ -1,10 +1,11 @@
 const { onRequest } = require('firebase-functions/v2/https');
 
 const checkBody = require('../util/checkBody');
-const { invalidRequest, invalidUser } = require('../util/constants');
+const { alreadyRedeemed, invalidRequest, invalidUser } = require('../util/constants');
 const findUser = require('../util/findUser');
 const { clientSecret, walletSecret } = require('../params');
 const redeem = require('../util/redeem');
+const redeemed = require('../util/redeemed');
 const registryClients = require('../util/registryClients');
 const signatureMatches = require('../util/signatureMatches');
 
@@ -26,7 +27,13 @@ module.exports = onRequest({ secrets: [clientSecret, walletSecret] }, async (req
   try {
     const user = await findUser(uid);
     if (!user) return res.send({ error: invalidUser });
-    return res.send(await redeem({ allowedTypes: registryClients.allows(client, type, 'redeem') ? [type] : [], code, uid: user.uid }));
+    try {
+      return res.send(await redeem({ allowedTypes: registryClients.allows(client, type, 'redeem') ? [type] : [], code, uid: user.uid }));
+    } catch (e) {
+      if (e !== alreadyRedeemed) throw e;
+      const previous = await redeemed({ code, uid: user.uid });
+      return res.send(previous ? { error: e, redeemed: previous } : { error: e });
+    }
   } catch (e) {
     if (typeof e === 'string') return res.send({ error: e });
     console.error(e);

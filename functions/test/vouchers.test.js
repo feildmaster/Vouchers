@@ -235,6 +235,45 @@ test('a registered client redeems for a user by uid or linked id', async () => {
   assert.deepEqual(fetchCalls.map((call) => call.body.uid), ['user1', 'user2']);
 });
 
+test('a repeat redeem through the client endpoint returns what the user redeemed', async () => {
+  seed({ data: { plan: 'pro', months: 3 }, type: 'sub', uses: 2 });
+  fake.store.set('voucher-clients/bot', { enabled: true, types: ['sub'] });
+  const key = registryClients.clientKey(CLIENT_SECRET, 'bot');
+  const body = { code: CODE, type: 'sub', uid: 'user1' };
+
+  await clientCall(body, key);
+  const repeat = await clientCall(body, key);
+
+  assert.deepEqual(repeat, {
+    error: 'Voucher already redeemed',
+    redeemed: { code: CODE, data: { plan: 'pro', months: 3 }, type: 'sub' },
+  });
+});
+
+test('another user, or an unpermitted type, gets no voucher data from a used code', async () => {
+  seed({ data: { plan: 'pro' }, type: 'sub' });
+  fake.store.set('voucher-clients/bot', { enabled: true, types: ['sub'] });
+  fake.store.set('voucher-clients/other', { enabled: true, types: ['nope'] });
+  const key = registryClients.clientKey(CLIENT_SECRET, 'bot');
+  const otherKey = registryClients.clientKey(CLIENT_SECRET, 'other');
+
+  await clientCall({ code: CODE, type: 'sub', uid: 'user1' }, key);
+
+  assert.deepEqual(await clientCall({ code: CODE, type: 'sub', uid: 'user2' }, key), { error: 'Voucher fully used' });
+  assert.deepEqual(await clientCall({ code: CODE, type: 'sub', uid: 'user1' }, otherKey), { error: 'Voucher not found' });
+});
+
+test('a pending redemption is not reported as already redeemed', async () => {
+  seed({ used: 1, type: 'sub' });
+  fake.store.set('voucher-clients/bot', { enabled: true, types: ['sub'] });
+  strand('user1', 10 * 1000);
+
+  assert.deepEqual(
+    await clientCall({ code: CODE, type: 'sub', uid: 'user1' }, registryClients.clientKey(CLIENT_SECRET, 'bot')),
+    { error: 'Redemption in progress' },
+  );
+});
+
 test('unregistered, disabled or unsigned callers cannot redeem through the client endpoint', async () => {
   seed();
   fake.store.set('voucher-clients/off', { enabled: false });
