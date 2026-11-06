@@ -1,0 +1,32 @@
+name: Deploy to Firebase Functions
+on:
+  push:
+    branches:
+      - master
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: deploy-functions
+  cancel-in-progress: false
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: functions/package-lock.json
+      - run: npm --prefix functions ci
+      - run: npm --prefix functions run lint
+      - run: npm --prefix functions test
+      - name: Deploy functions
+        run: |
+          printf '%s' "$SERVICE_ACCOUNT" > "$RUNNER_TEMP/service-account.json"
+          npx --yes firebase-tools@15 deploy --only functions:vouchers
+        env:
+          SERVICE_ACCOUNT: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_FEILDBASE }}'
+          FIREBASE_DEPLOY_AGENT: github-actions
+          GOOGLE_APPLICATION_CREDENTIALS: '${{ runner.temp }}/service-account.json'
