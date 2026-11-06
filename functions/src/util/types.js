@@ -1,3 +1,5 @@
+const { createHash } = require('node:crypto');
+
 const walletCredit = require('./walletCredit');
 
 const TYPE_PATTERN = /^[a-z][a-z0-9-]{0,31}$/;
@@ -18,6 +20,7 @@ const handlers = {
         currency: data.currency,
         extra: { voucher: code },
         memo: data.memo || `Voucher ${code}`,
+        requestId: `voucher-${createHash('sha256').update(`${code}\n${uid}`).digest('hex')}`,
         uid,
       }),
     }),

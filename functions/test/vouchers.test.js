@@ -76,8 +76,14 @@ test('a credit voucher pays the wallet once, signed, and tags the credit with th
   assert.equal(reply.transaction, 'tx1');
   assert.equal(reply.code, CODE);
   assert.equal(fetchCalls.length, 1);
+  assert.match(fetchCalls[0].body.requestId, /^voucher-[0-9a-f]{64}$/);
   assert.deepEqual(fetchCalls[0].body, {
-    amount: 50, currency: 'FMC', extra: { voucher: CODE }, memo: `Voucher ${CODE}`, uid: 'user1',
+    amount: 50,
+    currency: 'FMC',
+    extra: { voucher: CODE },
+    memo: `Voucher ${CODE}`,
+    requestId: fetchCalls[0].body.requestId,
+    uid: 'user1',
   });
   assert.equal(
     fetchCalls[0].headers.http_x_signature,
@@ -473,6 +479,20 @@ test('a redemption stranded as pending is finished by a retry without using the 
   assert.equal(fetchCalls.length, 1);
   assert.equal(fake.store.get(`voucher/${CODE}`).used, 1);
   assert.equal(fake.store.get(`voucher/${CODE}/redemptions/user1`).status, 'completed');
+});
+
+test('a retried payout carries the same request id, and each user gets their own', async () => {
+  seed({ used: 1, uses: 3 });
+  strand('user1', 10 * 60 * 1000);
+
+  await redeem.run({ code: CODE, type: 'credit' }, member('user1'));
+  strand('user1', 10 * 60 * 1000);
+  await redeem.run({ code: CODE, type: 'credit' }, member('user1'));
+  await redeem.run({ code: CODE, type: 'credit' }, member('user2'));
+
+  const ids = fetchCalls.map((call) => call.body.requestId);
+  assert.equal(ids[0], ids[1]);
+  assert.notEqual(ids[0], ids[2]);
 });
 
 test('a pending redemption that is still recent is left alone', async () => {
