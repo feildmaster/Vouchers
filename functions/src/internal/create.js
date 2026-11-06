@@ -12,7 +12,7 @@ const FIELDS = ['data', 'expiresAt', 'note', 'requestId', 'type'];
 
 module.exports = functions.runWith({ secrets: [clientSecret] }).https.onRequest(async (req, res) => {
   const clients = await registryClients(clientSecret.value());
-  const client = clients.find(({ create: allowed, key }) => allowed && signatureMatches(req, key));
+  const client = clients.find(({ key }) => signatureMatches(req, key));
   if (!client) return res.send({ error: invalidRequest });
 
   const bodyError = checkBody(req.body, FIELDS);
@@ -20,7 +20,9 @@ module.exports = functions.runWith({ secrets: [clientSecret] }).https.onRequest(
 
   const { data, expiresAt, note, requestId, type } = req.body;
   if (!isRequestId(requestId)) return res.send({ error: invalidRequestId });
-  if (type === 'credit') return res.send({ error: invalidRequest });
+  if (type === 'credit' || !registryClients.allows(client, type, 'create')) {
+    return res.send({ error: invalidRequest });
+  }
 
   try {
     return res.send(await create({

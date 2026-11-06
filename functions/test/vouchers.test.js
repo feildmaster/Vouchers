@@ -264,7 +264,7 @@ const clientCreateCall = async (body, key, handler = clientCreate) => {
 };
 
 test('a client allowed to create mints single-use vouchers of a non-credit type', async () => {
-  fake.store.set('voucher-clients/shop', { enabled: true, create: true });
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
   const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
 
   const { code } = await clientCreateCall({ type: 'subscription', data: { plan: 'month' }, requestId: 'purchase-0001' }, key);
@@ -275,8 +275,11 @@ test('a client allowed to create mints single-use vouchers of a non-credit type'
   assert.equal(stored.type, 'subscription');
 });
 
-test('clients cannot mint credit vouchers or multi-use vouchers', async () => {
-  fake.store.set('voucher-clients/shop', { enabled: true, create: true });
+test('clients cannot mint credit vouchers or multi-use vouchers, even when granted create on credit', async () => {
+  fake.store.set('voucher-clients/shop', {
+    enabled: true,
+    types: { credit: { create: true }, subscription: { create: true } },
+  });
   const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
 
   assert.deepEqual(
@@ -298,7 +301,7 @@ test('a client without the create flag cannot mint vouchers', async () => {
 });
 
 test('a reserved voucher cannot be redeemed until it is activated', async () => {
-  fake.store.set('voucher-clients/shop', { enabled: true, create: true });
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
   const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
   const { code } = await clientCreateCall({ type: 'subscription', data: {}, requestId: 'purchase-0001' }, key);
   assert.equal(fake.store.get(`vouchers/${code}`).active, false);
@@ -312,7 +315,7 @@ test('a reserved voucher cannot be redeemed until it is activated', async () => 
 });
 
 test('repeating a reservation returns the same code, and changing it is refused', async () => {
-  fake.store.set('voucher-clients/shop', { enabled: true, create: true });
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
   const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
   const body = { type: 'subscription', data: { plan: 'month' }, requestId: 'purchase-0001' };
 
@@ -329,7 +332,7 @@ test('repeating a reservation returns the same code, and changing it is refused'
 });
 
 test('reserving needs a valid request id', async () => {
-  fake.store.set('voucher-clients/shop', { enabled: true, create: true });
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
   const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
 
   assert.deepEqual(
@@ -343,7 +346,7 @@ test('reserving needs a valid request id', async () => {
 });
 
 test('activation needs a known request id and the create permission', async () => {
-  fake.store.set('voucher-clients/shop', { enabled: true, create: true });
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
   fake.store.set('voucher-clients/bot', { enabled: true });
   const shopKey = registryClients.clientKey(CLIENT_SECRET, 'shop');
   const botKey = registryClients.clientKey(CLIENT_SECRET, 'bot');
@@ -354,7 +357,7 @@ test('activation needs a known request id and the create permission', async () =
   );
   assert.deepEqual(
     await clientCreateCall({ requestId: 'purchase-9999' }, botKey, clientActivate),
-    { error: 'Invalid request' },
+    { error: 'Invalid request id' },
   );
 });
 
@@ -395,4 +398,37 @@ test('the client endpoint needs a type, and the type must be one the client is r
     { error: 'Voucher not found' },
   );
   assert.equal(fake.store.get(`vouchers/${CODE}`).used, 0);
+});
+
+test('create and redeem are granted per type, and the list form only grants redeem', async () => {
+  seed({ type: 'badge', data: {} });
+  fake.store.set('voucher-clients/mixed', {
+    enabled: true,
+    types: { badge: { redeem: true }, subscription: { create: true } },
+  });
+  fake.store.set('voucher-clients/listed', { enabled: true, types: ['badge'] });
+  const mixed = registryClients.clientKey(CLIENT_SECRET, 'mixed');
+  const listed = registryClients.clientKey(CLIENT_SECRET, 'listed');
+  const reserve = (type) => ({ type, data: {}, requestId: 'purchase-0001' });
+
+  assert.ok((await clientCreateCall(reserve('subscription'), mixed)).code);
+  assert.deepEqual(await clientCreateCall(reserve('badge'), mixed), { error: 'Invalid request' });
+  assert.deepEqual(await clientCreateCall(reserve('badge'), listed), { error: 'Invalid request' });
+
+  assert.deepEqual(
+    await clientCall({ code: CODE, type: 'subscription', uid: 'user1' }, mixed),
+    { error: 'Voucher not found' },
+  );
+  assert.equal((await clientCall({ code: CODE, type: 'badge', uid: 'user1' }, listed)).type, 'badge');
+});
+
+test('activation needs create permission on the type that was reserved', async () => {
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
+  const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
+  const { code } = await clientCreateCall({ type: 'subscription', data: {}, requestId: 'purchase-0001' }, key);
+
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { redeem: true } } });
+
+  assert.deepEqual(await clientCreateCall({ requestId: 'purchase-0001' }, key, clientActivate), { error: 'Invalid request' });
+  assert.equal(fake.store.get(`vouchers/${code}`).active, false);
 });

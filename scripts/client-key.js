@@ -5,14 +5,19 @@ const functionsRequire = require('node:module').createRequire(path.join(__dirnam
 const { initializeApp } = functionsRequire('firebase-admin/app');
 const { getFirestore } = functionsRequire('firebase-admin/firestore');
 
-const usage = 'Usage: WALLET_CHARGE_SECRET=<secret> node scripts/client-key.js <client id> [--salt=<salt>] [--types=<type,type>] [--create]';
+const usage = 'Usage: WALLET_CHARGE_SECRET=<secret> node scripts/client-key.js <client id> [--salt=<salt>] [--create=<type,type>] [--redeem=<type,type>]';
 
 const args = process.argv.slice(2);
 const flags = args.filter((arg) => arg.startsWith('--'));
 const [id] = args.filter((arg) => !arg.startsWith('--'));
-const saltFlag = flags.find((flag) => flag.startsWith('--salt='));
-const typesFlag = flags.find((flag) => flag.startsWith('--types='));
-const unknown = flags.filter((flag) => flag !== '--create' && flag !== saltFlag && flag !== typesFlag);
+const flagValue = (name) => {
+  const flag = flags.find((candidate) => candidate.startsWith(`--${name}=`));
+  return flag === undefined ? undefined : flag.slice(name.length + 3);
+};
+const salt = flagValue('salt');
+const create = flagValue('create');
+const redeem = flagValue('redeem');
+const unknown = flags.filter((flag) => !['salt', 'create', 'redeem'].some((name) => flag.startsWith(`--${name}=`)));
 const secret = process.env.WALLET_CHARGE_SECRET;
 
 if (!id || !secret || unknown.length) {
@@ -23,34 +28,45 @@ if (!id || !secret || unknown.length) {
 
 initializeApp({ projectId: process.env.GCLOUD_PROJECT || 'feildbase' });
 
-const { clientKey } = require('../functions/src/util/registryClients');
+const { clientKey, clientTypes } = require('../functions/src/util/registryClients');
+
+const list = (value) => value.split(',').map((type) => type.trim()).filter(Boolean);
+
+const withPermission = (types, permission, names) => {
+  const next = Object.fromEntries(Object.entries(types)
+    .map(([type, granted]) => [type, { ...granted, [permission]: false }]));
+  names.forEach((name) => {
+    next[name] = { create: false, redeem: false, ...next[name], [permission]: true };
+  });
+  return Object.fromEntries(Object.entries(next).filter(([, granted]) => granted.create || granted.redeem));
+};
 
 const main = async () => {
   const ref = getFirestore().doc(`voucher-clients/${id}`);
   const existing = await ref.get();
-  const requestedSalt = saltFlag ? saltFlag.slice('--salt='.length) : undefined;
   const currentSalt = existing.exists ? existing.get('salt') : undefined;
 
-  if (existing.exists && requestedSalt !== undefined && requestedSalt !== currentSalt) {
+  if (existing.exists && salt !== undefined && salt !== currentSalt) {
     console.error(`Client "${id}" already exists with a different salt; changing it would invalidate its key.`);
     process.exit(1);
   }
 
-  const salt = currentSalt ?? requestedSalt;
-  const create = flags.includes('--create') || (existing.exists && existing.get('create') === true);
-  const types = typesFlag
-    ? typesFlag.slice('--types='.length).split(',').map((type) => type.trim()).filter(Boolean)
-    : (existing.exists && existing.get('types')) || [];
+  const finalSalt = currentSalt ?? salt;
+  const stored = clientTypes(existing.exists ? existing.get('types') : undefined);
+  const withCreate = create === undefined ? stored : withPermission(stored, 'create', list(create));
+  const types = redeem === undefined ? withCreate : withPermission(withCreate, 'redeem', list(redeem));
 
   await ref.set({
-    create,
     enabled: true,
     types,
-    ...(salt ? { salt } : {}),
-  }, { merge: true });
+    ...(finalSalt ? { salt: finalSalt } : {}),
+  });
 
-  console.error(`${existing.exists ? 'Updated' : 'Registered'} voucher client "${id}" (create: ${create}, types: ${types.join(', ') || 'none'})`);
-  console.log(clientKey(secret, id, salt));
+  const summary = Object.entries(types)
+    .map(([type, granted]) => `${type}: ${['create', 'redeem'].filter((p) => granted[p]).join('+')}`)
+    .join(', ');
+  console.error(`${existing.exists ? 'Updated' : 'Registered'} voucher client "${id}" (${summary || 'no types'})`);
+  console.log(clientKey(secret, id, finalSalt));
 };
 
 main().catch((e) => {

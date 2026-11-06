@@ -12,7 +12,7 @@ const FIELDS = ['requestId'];
 
 module.exports = functions.runWith({ secrets: [clientSecret] }).https.onRequest(async (req, res) => {
   const clients = await registryClients(clientSecret.value());
-  const client = clients.find(({ create: allowed, key }) => allowed && signatureMatches(req, key));
+  const client = clients.find(({ key }) => signatureMatches(req, key));
   if (!client) return res.send({ error: invalidRequest });
 
   const bodyError = checkBody(req.body, FIELDS);
@@ -22,7 +22,11 @@ module.exports = functions.runWith({ secrets: [clientSecret] }).https.onRequest(
   if (!isRequestId(requestId)) return res.send({ error: invalidRequestId });
 
   try {
-    return res.send(await activate({ client: client.id, requestId }));
+    return res.send(await activate({
+      canCreate: (type) => registryClients.allows(client, type, 'create'),
+      client: client.id,
+      requestId,
+    }));
   } catch (e) {
     if (typeof e === 'string') return res.send({ error: e });
     console.error(e);

@@ -26,7 +26,7 @@ module.exports = functions.runWith({ secrets: [clientSecret, walletSecret] }).ht
   try {
     const user = await findUser(uid);
     if (!user) return res.send({ error: invalidUser });
-    return res.send(await redeem({ allowedTypes: client.types.includes(type) ? [type] : [], code, uid: user.uid }));
+    return res.send(await redeem({ allowedTypes: registryClients.allows(client, type, 'redeem') ? [type] : [], code, uid: user.uid }));
   } catch (e) {
     if (typeof e === 'string') return res.send({ error: e });
     console.error(e);

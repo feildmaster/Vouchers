@@ -1,8 +1,8 @@
 const { getFirestore } = require('firebase-admin/firestore');
 
-const { invalidRequestId, invalidVoucher } = require('./constants');
+const { invalidRequest, invalidRequestId, invalidVoucher } = require('./constants');
 
-module.exports = async function activateVoucher({ client, requestId }) {
+module.exports = async function activateVoucher({ canCreate, client, requestId }) {
   const db = getFirestore();
   const requestRef = db.doc(`voucher-requests/${client}:${requestId}`);
 
@@ -14,6 +14,7 @@ module.exports = async function activateVoucher({ client, requestId }) {
     const ref = db.doc(`vouchers/${code}`);
     const voucher = await t.get(ref);
     if (!voucher.exists) throw invalidVoucher;
+    if (!canCreate(voucher.get('type'))) throw invalidRequest;
 
     if (voucher.get('active') !== true) t.update(ref, { active: true });
     return { code };
