@@ -1,0 +1,22 @@
+{
+  "name": "vouchers-functions",
+  "description": "Voucher functions for feildbase",
+  "scripts": {
+    "lint": "eslint .",
+    "test": "node --test \"test/**/*.test.js\"",
+    "deploy": "firebase deploy --only functions:vouchers"
+  },
+  "engines": {
+    "node": "24"
+  },
+  "main": "index.js",
+  "dependencies": {
+    "firebase-admin": "^14.5.0",
+    "firebase-functions": "^7.4.0"
+  },
+  "devDependencies": {
+    "eslint": "^8.46.0",
+    "eslint-plugin-promise": "^4.0.1"
+  },
+  "private": true
+}
