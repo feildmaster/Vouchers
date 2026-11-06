@@ -434,3 +434,26 @@ test('activation needs create permission on the type that was reserved', async (
   assert.deepEqual(await clientCreateCall({ requestId: 'purchase-0001' }, key, clientActivate), { error: 'Invalid request' });
   assert.equal(fake.store.get(`voucher/${code}`).active, false);
 });
+
+test('a reservation is marked for deletion until it is activated, and an activated voucher never is', async () => {
+  fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
+  const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
+  const before = Date.now();
+  const { code } = await clientCreateCall({ type: 'subscription', data: {}, requestId: 'purchase-0001' }, key);
+
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
+  const reserved = fake.store.get(`voucher/${code}`).deleteAt.getTime();
+  assert.ok(reserved >= before + thirtyDays && reserved <= Date.now() + thirtyDays);
+  assert.equal(fake.store.get('voucher-requests/shop:purchase-0001').deleteAt.getTime(), reserved);
+
+  await clientCreateCall({ requestId: 'purchase-0001' }, key, clientActivate);
+
+  assert.equal(fake.store.get(`voucher/${code}`).deleteAt, null);
+  assert.equal(fake.store.get('voucher-requests/shop:purchase-0001').deleteAt.getTime(), reserved);
+});
+
+test('vouchers an admin creates are never marked for deletion', async () => {
+  const { code } = await create.run({ type: 'badge', data: {} }, admin);
+
+  assert.equal('deleteAt' in fake.store.get(`voucher/${code}`), false);
+});

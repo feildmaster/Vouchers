@@ -16,7 +16,7 @@ module.exports = async function activateVoucher({ canCreate, client, requestId }
     if (!voucher.exists) throw invalidVoucher;
     if (!canCreate(voucher.get('type'))) throw invalidRequest;
 
-    if (voucher.get('active') !== true) t.update(ref, { active: true });
+    if (voucher.get('active') !== true) t.update(ref, { active: true, deleteAt: null });
     return { code };
   });
 };

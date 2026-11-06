@@ -6,6 +6,7 @@ const types = require('./types');
 
 const MAX_USES = 100_000;
 const MAX_ATTEMPTS = 5;
+const RESERVATION_TTL = 30 * 24 * 60 * 60 * 1000;
 
 const parseExpiry = (expiresAt) => {
   if (expiresAt === undefined) return undefined;
@@ -38,6 +39,7 @@ module.exports = async function createVoucher({
   const requestRef = reservation
     ? db.doc(`voucher-requests/${reservation.client}:${reservation.requestId}`)
     : undefined;
+  const deleteAt = reservation ? new Date(Date.now() + RESERVATION_TTL) : undefined;
 
   const tryCreate = async (attemptsLeft) => {
     if (attemptsLeft === 0) throw new Error('Could not generate a unique voucher code');
@@ -56,6 +58,7 @@ module.exports = async function createVoucher({
         createdBy,
         data,
         date: FieldValue.serverTimestamp(),
+        ...(deleteAt ? { deleteAt } : {}),
         ...(expiry ? { expiresAt: expiry } : {}),
         ...(note ? { note } : {}),
         revoked: false,
@@ -68,6 +71,7 @@ module.exports = async function createVoucher({
           client: reservation.client,
           code,
           date: FieldValue.serverTimestamp(),
+          deleteAt,
           key: requestKey,
         });
       }
