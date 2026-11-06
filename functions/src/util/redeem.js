@@ -19,8 +19,8 @@ module.exports = async function redeem({ allowedTypes, code, uid }) {
   if (!normalized) throw invalidVoucher;
 
   const db = getFirestore();
-  const voucherRef = db.doc(`vouchers/${normalized}`);
-  const redemptionRef = db.doc(`vouchers/${normalized}/redemptions/${uid}`);
+  const voucherRef = db.doc(`voucher/${normalized}`);
+  const redemptionRef = db.doc(`voucher/${normalized}/redemptions/${uid}`);
 
   const { data, type } = await db.runTransaction(async (t) => {
     const [voucher, redemption] = await Promise.all([t.get(voucherRef), t.get(redemptionRef)]);

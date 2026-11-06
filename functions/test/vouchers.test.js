@@ -23,7 +23,7 @@ let revoke;
 const admin = { auth: { uid: 'boss', token: { admin: true } } };
 const member = (uid) => ({ auth: { uid, token: {} } });
 
-const seed = (fields = {}, code = CODE) => fake.store.set(`vouchers/${code}`, {
+const seed = (fields = {}, code = CODE) => fake.store.set(`voucher/${code}`, {
   data: { amount: 50, currency: 'FMC' },
   revoked: false,
   type: 'credit',
@@ -83,8 +83,8 @@ test('a credit voucher pays the wallet once, signed, and tags the credit with th
     fetchCalls[0].headers.http_x_signature,
     hexSignature(JSON.stringify(fetchCalls[0].body), 'wallet-secret'),
   );
-  assert.equal(fake.store.get(`vouchers/${CODE}`).used, 1);
-  assert.equal(fake.store.get(`vouchers/${CODE}/redemptions/user1`).status, 'completed');
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 1);
+  assert.equal(fake.store.get(`voucher/${CODE}/redemptions/user1`).status, 'completed');
 });
 
 test('a single-use voucher cannot be redeemed by a second user', async () => {
@@ -111,8 +111,8 @@ test('a failed payout releases the voucher so it can be tried again', async () =
   fetchReply = { ok: false, body: { error: 'Invalid wallet' } };
 
   await expectError(redeem.run({ code: CODE, type: 'credit' }, member('user1')), 'Payout failed');
-  assert.equal(fake.store.get(`vouchers/${CODE}`).used, 0);
-  assert.equal(fake.store.has(`vouchers/${CODE}/redemptions/user1`), false);
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 0);
+  assert.equal(fake.store.has(`voucher/${CODE}/redemptions/user1`), false);
 
   fetchReply = { ok: true, body: { id: 'tx2' } };
   const reply = await redeem.run({ code: CODE, type: 'credit' }, member('user1'));
@@ -153,7 +153,7 @@ test('only admins create vouchers; single-use is the default', async () => {
 
   const { code } = await create.run(request, admin);
   assert.match(code, /^[A-Z0-9]{4}-[A-Z0-9]{4}-[A-Z0-9]{4}$/);
-  const stored = fake.store.get(`vouchers/${code}`);
+  const stored = fake.store.get(`voucher/${code}`);
   assert.equal(stored.uses, 1);
   assert.equal(stored.used, 0);
   assert.equal(stored.createdBy, 'boss');
@@ -165,8 +165,8 @@ test('an admin can create a multi-use voucher with an expiry', async () => {
     type: 'credit', data: { amount: 10, currency: 'FMC' }, uses: 25, expiresAt,
   }, admin);
 
-  assert.equal(fake.store.get(`vouchers/${code}`).uses, 25);
-  assert.equal(fake.store.get(`vouchers/${code}`).expiresAt.getTime(), expiresAt);
+  assert.equal(fake.store.get(`voucher/${code}`).uses, 25);
+  assert.equal(fake.store.get(`voucher/${code}`).expiresAt.getTime(), expiresAt);
 });
 
 test('invalid vouchers are refused at creation', async () => {
@@ -186,7 +186,7 @@ test('invalid vouchers are refused at creation', async () => {
     { code: 'invalid-argument' },
     JSON.stringify(request),
   )));
-  assert.equal([...fake.store.keys()].filter((key) => key.startsWith('vouchers/')).length, 0);
+  assert.equal([...fake.store.keys()].filter((key) => key.startsWith('voucher/')).length, 0);
 });
 
 test('revoking a voucher is admin-only and stops redemption', async () => {
@@ -250,7 +250,7 @@ test('the client endpoint refuses unknown properties and unknown users', async (
     { error: 'Unknown properties: uses' },
   );
   assert.deepEqual(await clientCall({ code: CODE, type: 'credit', uid: 'ghost' }, key), { error: 'User not found' });
-  assert.equal(fake.store.get(`vouchers/${CODE}`).used, 0);
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 0);
 });
 
 const clientCreateCall = async (body, key, handler = clientCreate) => {
@@ -271,7 +271,7 @@ test('a client allowed to create mints single-use vouchers of a non-credit type'
 
   const { code } = await clientCreateCall({ type: 'subscription', data: { plan: 'month' }, requestId: 'purchase-0001' }, key);
 
-  const stored = fake.store.get(`vouchers/${code}`);
+  const stored = fake.store.get(`voucher/${code}`);
   assert.equal(stored.uses, 1);
   assert.equal(stored.createdBy, 'client:shop');
   assert.equal(stored.type, 'subscription');
@@ -292,7 +292,7 @@ test('clients cannot mint credit vouchers or multi-use vouchers, even when grant
     await clientCreateCall({ type: 'subscription', data: {}, uses: 50, requestId: 'purchase-0001' }, key),
     { error: 'Unknown properties: uses' },
   );
-  assert.equal([...fake.store.keys()].filter((k) => k.startsWith('vouchers/')).length, 0);
+  assert.equal([...fake.store.keys()].filter((k) => k.startsWith('voucher/')).length, 0);
 });
 
 test('a client without the create flag cannot mint vouchers', async () => {
@@ -306,7 +306,7 @@ test('a reserved voucher cannot be redeemed until it is activated', async () => 
   fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { create: true } } });
   const key = registryClients.clientKey(CLIENT_SECRET, 'shop');
   const { code } = await clientCreateCall({ type: 'subscription', data: {}, requestId: 'purchase-0001' }, key);
-  assert.equal(fake.store.get(`vouchers/${code}`).active, false);
+  assert.equal(fake.store.get(`voucher/${code}`).active, false);
 
   await expectError(redeem.run({ code, type: 'subscription' }, member('user1')), 'Voucher not found');
 
@@ -329,7 +329,7 @@ test('repeating a reservation returns the same code, and changing it is refused'
     await clientCreateCall({ ...body, data: { plan: 'year' } }, key),
     { error: 'Invalid request id' },
   );
-  const stored = [...fake.store.keys()].filter((path) => path.split('/').length === 2 && path.startsWith('vouchers/'));
+  const stored = [...fake.store.keys()].filter((path) => path.split('/').length === 2 && path.startsWith('voucher/'));
   assert.equal(stored.length, 1);
 });
 
@@ -368,7 +368,7 @@ test('the redeem callable needs a type, and a voucher of another type is refused
 
   await assert.rejects(redeem.run({ code: CODE }, member('user1')), { code: 'invalid-argument' });
   await expectError(redeem.run({ code: CODE, type: 'subscription' }, member('user1')), 'Voucher not found');
-  assert.equal(fake.store.get(`vouchers/${CODE}`).used, 0);
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 0);
 
   const reply = await redeem.run({ code: CODE, type: 'badge' }, member('user1'));
   assert.equal(reply.type, 'badge');
@@ -383,7 +383,7 @@ test('a client can only redeem the types it is registered for, and an unlisted c
 
   assert.deepEqual(await clientCall(body, registryClients.clientKey(CLIENT_SECRET, 'site')), { error: 'Voucher not found' });
   assert.deepEqual(await clientCall(body, registryClients.clientKey(CLIENT_SECRET, 'bare')), { error: 'Voucher not found' });
-  assert.equal(fake.store.get(`vouchers/${CODE}`).used, 0);
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 0);
 
   const reply = await clientCall(body, registryClients.clientKey(CLIENT_SECRET, 'shop'));
   assert.equal(reply.type, 'subscription');
@@ -399,7 +399,7 @@ test('the client endpoint needs a type, and the type must be one the client is r
     await clientCall({ code: CODE, type: 'badge', uid: 'user1' }, key),
     { error: 'Voucher not found' },
   );
-  assert.equal(fake.store.get(`vouchers/${CODE}`).used, 0);
+  assert.equal(fake.store.get(`voucher/${CODE}`).used, 0);
 });
 
 test('create and redeem are granted per type, and the list form only grants redeem', async () => {
@@ -432,5 +432,5 @@ test('activation needs create permission on the type that was reserved', async (
   fake.store.set('voucher-clients/shop', { enabled: true, types: { subscription: { redeem: true } } });
 
   assert.deepEqual(await clientCreateCall({ requestId: 'purchase-0001' }, key, clientActivate), { error: 'Invalid request' });
-  assert.equal(fake.store.get(`vouchers/${code}`).active, false);
+  assert.equal(fake.store.get(`voucher/${code}`).active, false);
 });

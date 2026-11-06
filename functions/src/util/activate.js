@@ -11,7 +11,7 @@ module.exports = async function activateVoucher({ canCreate, client, requestId }
     if (!request.exists) throw invalidRequestId;
 
     const code = request.get('code');
-    const ref = db.doc(`vouchers/${code}`);
+    const ref = db.doc(`voucher/${code}`);
     const voucher = await t.get(ref);
     if (!voucher.exists) throw invalidVoucher;
     if (!canCreate(voucher.get('type'))) throw invalidRequest;

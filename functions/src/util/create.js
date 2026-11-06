@@ -42,7 +42,7 @@ module.exports = async function createVoucher({
   const tryCreate = async (attemptsLeft) => {
     if (attemptsLeft === 0) throw new Error('Could not generate a unique voucher code');
     const code = generate();
-    const ref = db.doc(`vouchers/${code}`);
+    const ref = db.doc(`voucher/${code}`);
     const created = await db.runTransaction(async (t) => {
       const [voucher, request] = await Promise.all([t.get(ref), requestRef && t.get(requestRef)]);
       if (request?.exists) {
