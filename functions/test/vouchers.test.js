@@ -32,6 +32,8 @@ const seed = (fields = {}, code = CODE) => fake.store.set(`vouchers/${code}`, {
   ...fields,
 });
 
+const callable = (fn) => ({ run: (data, context = {}) => fn.run({ data, ...context }) });
+
 const expectError = (promise, message) => assert.rejects(promise, (e) => e === message || e.message === message);
 
 beforeEach(() => {
@@ -50,9 +52,9 @@ beforeEach(() => {
     .forEach((key) => delete require.cache[key]);
   hexSignature = require('../src/util/hexSignature');
   registryClients = require('../src/util/registryClients');
-  create = require('../src/external/create');
-  revoke = require('../src/external/revoke');
-  redeem = require('../src/external/redeem');
+  create = callable(require('../src/external/create'));
+  revoke = callable(require('../src/external/revoke'));
+  redeem = callable(require('../src/external/redeem'));
   redeemFor = require('../src/internal/redeem');
   clientCreate = require('../src/internal/create');
   clientActivate = require('../src/internal/activate');

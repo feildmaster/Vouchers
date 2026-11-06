@@ -1,14 +1,14 @@
-const functions = require('firebase-functions/v1');
+const { HttpsError, onCall } = require('firebase-functions/v2/https');
 
 const callableError = require('../util/callableError');
 const revoke = require('../util/revoke');
 
-module.exports = functions.https.onCall(async ({ code } = {}, context) => {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated');
-  if (context.auth.token.admin !== true) throw new functions.https.HttpsError('permission-denied');
+module.exports = onCall(async ({ auth, data }) => {
+  if (!auth) throw new HttpsError('unauthenticated', 'Sign in required');
+  if (auth.token.admin !== true) throw new HttpsError('permission-denied', 'Admins only');
 
   try {
-    return await revoke(code);
+    return await revoke(data?.code);
   } catch (error) {
     throw callableError(error);
   }

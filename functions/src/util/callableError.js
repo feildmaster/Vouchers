@@ -1,4 +1,4 @@
-const functions = require('firebase-functions/v1');
+const { HttpsError } = require('firebase-functions/v2/https');
 
 const {
   invalidRequest,
@@ -14,5 +14,5 @@ const CODES = {
 
 module.exports = function callableError(error) {
   if (typeof error !== 'string') return error;
-  return new functions.https.HttpsError(CODES[error] || 'failed-precondition', error);
+  return new HttpsError(CODES[error] || 'failed-precondition', error);
 };

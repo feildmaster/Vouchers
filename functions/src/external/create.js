@@ -1,15 +1,15 @@
-const functions = require('firebase-functions/v1');
+const { HttpsError, onCall } = require('firebase-functions/v2/https');
 
 const callableError = require('../util/callableError');
 const create = require('../util/create');
 
-module.exports = functions.https.onCall(async (request = {}, context) => {
-  if (!context.auth) throw new functions.https.HttpsError('unauthenticated');
-  if (context.auth.token.admin !== true) throw new functions.https.HttpsError('permission-denied');
+module.exports = onCall(async ({ auth, data: request }) => {
+  if (!auth) throw new HttpsError('unauthenticated', 'Sign in required');
+  if (auth.token.admin !== true) throw new HttpsError('permission-denied', 'Admins only');
 
-  const { data, expiresAt, note, type, uses } = request;
+  const { data, expiresAt, note, type, uses } = request ?? {};
   try {
-    return await create({ createdBy: context.auth.uid, data, expiresAt, note, type, uses });
+    return await create({ createdBy: auth.uid, data, expiresAt, note, type, uses });
   } catch (error) {
     throw callableError(error);
   }

@@ -1,4 +1,4 @@
-const functions = require('firebase-functions/v1');
+const { onRequest } = require('firebase-functions/v2/https');
 
 const activate = require('../util/activate');
 const checkBody = require('../util/checkBody');
@@ -10,7 +10,7 @@ const signatureMatches = require('../util/signatureMatches');
 
 const FIELDS = ['requestId'];
 
-module.exports = functions.runWith({ secrets: [clientSecret] }).https.onRequest(async (req, res) => {
+module.exports = onRequest({ secrets: [clientSecret] }, async (req, res) => {
   const clients = await registryClients(clientSecret.value());
   const client = clients.find(({ key }) => signatureMatches(req, key));
   if (!client) return res.send({ error: invalidRequest });
