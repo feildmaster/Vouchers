@@ -1,3 +1,4 @@
+const { spawnSync } = require('node:child_process');
 const path = require('node:path');
 
 const functionsRequire = require('node:module').createRequire(path.join(__dirname, '../functions/'));
@@ -5,10 +6,30 @@ const functionsRequire = require('node:module').createRequire(path.join(__dirnam
 const { initializeApp } = functionsRequire('firebase-admin/app');
 const { getFirestore } = functionsRequire('firebase-admin/firestore');
 
+const project = process.env.GCLOUD_PROJECT || 'feildbase';
+
 const usage = [
-  'Usage: WALLET_CHARGE_SECRET=<secret> node scripts/client-key.js <client id> [--salt=<salt>] [--write] [--create=<type,type>] [--redeem=<type,type>]',
+  'Usage: [WALLET_CHARGE_SECRET=<secret>] node scripts/client-key.js <client id> [--salt=<salt>] [--write] [--create=<type,type>] [--redeem=<type,type>]',
   'Prints the key only. Registering the client in Firestore needs --write, --create or --redeem.',
+  'Without WALLET_CHARGE_SECRET the secret is read from gcloud.',
 ].join('\n');
+
+const gcloud = (args) => (process.platform === 'win32'
+  ? spawnSync('cmd.exe', ['/d', '/s', '/c', 'gcloud', ...args], { encoding: 'utf8' })
+  : spawnSync('gcloud', args, { encoding: 'utf8' }));
+
+const problemOf = (stderr = '') => {
+  const lines = stderr.split('\n').map((line) => line.trim()).filter(Boolean);
+  return lines.find((line) => line.startsWith('ERROR:')) || lines[0] || 'gcloud did not run';
+};
+
+const fromGcloud = () => {
+  const result = gcloud(['secrets', 'versions', 'access', 'latest', '--secret=WALLET_CHARGE_SECRET', `--project=${project}`]);
+  const value = result.status === 0 ? result.stdout.replace(/[\r\n]+$/, '') : '';
+  if (value) console.error(`Read WALLET_CHARGE_SECRET from gcloud (${project})`);
+  else console.error(`Could not read WALLET_CHARGE_SECRET from gcloud: ${problemOf(result.stderr)}`);
+  return value || undefined;
+};
 
 const args = process.argv.slice(2);
 const flags = args.filter((arg) => arg.startsWith('--'));
@@ -22,7 +43,7 @@ const create = flagValue('create');
 const redeem = flagValue('redeem');
 const write = flags.includes('--write') || create !== undefined || redeem !== undefined;
 const unknown = flags.filter((flag) => flag !== '--write' && !['salt', 'create', 'redeem'].some((name) => flag.startsWith(`--${name}=`)));
-const secret = process.env.WALLET_CHARGE_SECRET;
+const secret = process.env.WALLET_CHARGE_SECRET || (id && !unknown.length ? fromGcloud() : undefined);
 
 if (!id || !secret || unknown.length) {
   if (unknown.length) console.error(`Unexpected argument: ${unknown.join(' ')}`);
